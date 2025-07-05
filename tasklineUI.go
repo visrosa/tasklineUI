@@ -36,7 +36,8 @@ const (
 )
 
 var (
-	highlight = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
+	highlight = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5"))
+	bold      = lipgloss.NewStyle().Bold(true)
 	greyed    = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 )
 
@@ -80,13 +81,13 @@ func initialModel() model {
 	input.Width = 120
 	input.Prompt = ""
 	mainLines, taskSummary := loadLines()
-	vp := viewport.New(80, 20)
-	// wrappedLines := wordwrap.String(strings.Join(mainLines, "\n"), vp.Width-2) // Wrap lines to fit viewport width
-	vp.SetContent(wordwrap.String(strings.Join(mainLines, "\n"), vp.Width-2))
+	vp := viewport.New(80, 20) // Default size before detecting the actual dimensions
+	wrapped := wordwrap.String(strings.Join(mainLines, "\n"), vp.Width-2)
+	vp.SetContent(wrapped)
 	// This sets a visible scrollbar style (you can customize colors)
-	vp.Style = vp.Style.
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("8"))
+	// vp.Style = vp.Style.
+	// 	Border(lipgloss.NormalBorder()).
+	// 	BorderForeground(lipgloss.Color("8"))
 
 	awVp := viewport.New(vp.Width, 3) // Action words viewport: height 3
 	return model{
@@ -107,18 +108,50 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		key := strings.ToLower(msg.String())
+		switch key {
+		case "up":
+			m.viewport.ScrollUp(1)
+			return m, nil
+		case "down":
+			m.viewport.ScrollDown(1)
+			return m, nil
+		case "pgup":
+			m.viewport.HalfPageUp()
+			return m, nil
+		case "pgdown":
+			m.viewport.HalfPageDown()
+			return m, nil
+		// case "t":
+		// 	m.state = stateAddTask
+		// 	m.input.SetValue("")
+		// 	m.input.Focus()
+		// 	return m, textinput.Blink
+		// case "n":
+		// 	m.state = stateAddNote
+		// 	m.input.SetValue("")
+		// 	m.input.Focus()
+		// 	return m, textinput.Blink
+		// case "b":
+		// 	m.state = stateBoard
+		// 	m.input.SetValue("")
+		// 	m.input.Focus()
+		// 	return m, textinput.Blink
+		case "q":
+			if m.state == stateNormal || m.state == stateHelp {
+				m.quitting = true
+				return m, tea.Quit
+			}
+		case "h", "?":
+			if m.state == stateHelp {
+				m.state = stateNormal
+				return m, nil
+			}
+			m.state = stateHelp
+			return m, nil
+		}
 		switch m.state {
 		case stateNormal:
 			switch key {
-			case "up":
-				m.viewport.ScrollUp(1)
-				return m, nil
-			case "down":
-				m.viewport.ScrollDown(1)
-				return m, nil
-			case "pgup":
-				m.viewport.HalfPageUp()
-				return m, nil
 			case "t":
 				m.state = stateAddTask
 				m.input.SetValue("")
@@ -143,7 +176,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case stateHelp:
 			switch key {
-			case "esc", "q":
+			case "esc":
 				m.state = stateNormal
 				return m, nil
 			}
@@ -226,13 +259,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.windowHeight = msg.Height
 		m.windowWidth = msg.Width
 		if m.state == stateInitializing {
-			m.viewport = viewport.New(m.windowWidth-12, m.windowHeight-10)
-			m.viewport.SetContent(strings.Join(m.lines, "\n"))
+			m.viewport = viewport.New(m.windowWidth-2, m.windowHeight-9)
+			wrapped := wordwrap.String(strings.Join(m.lines, "\n"), m.viewport.Width)
+			m.viewport.SetContent(wrapped)
 			m.state = stateNormal
 		} else {
-			m.viewport.Height = m.windowHeight - 10
-			m.viewport.Width = (m.windowWidth - 12)
-			m.viewport.SetContent(strings.Join(m.lines, "\n"))
+			m.viewport.Height = m.windowHeight - 9
+			m.viewport.Width = (m.windowWidth - 2)
+			wrapped := wordwrap.String(strings.Join(m.lines, "\n"), m.viewport.Width)
+			m.viewport.SetContent(wrapped)
 		}
 		return m, nil
 	}
@@ -279,7 +314,7 @@ func (m model) actionWord(aW actions) string {
 		case quit:
 			key, rest = "Q", "uit"
 		}
-		return highlight.Render(key) + rest
+		return highlight.Bold(true).Render(key) + lipgloss.NewStyle().Bold(true).Render(rest)
 	}
 }
 
@@ -336,25 +371,31 @@ func (m model) viewHeader() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, m.viewTitle(), " ", m.viewActionWords())
 }
 func (m model) viewScrollbar() string {
-	// Header and footer for the scrollbar
-	header := "🮣\n│\x1b[38;5;5m ↑\x1b[0m\n"
-	footer := "╰──"
+
 	// The middle part: repeat " │ \n" for (height-2) lines, to account for header/footer
-	barCount := m.viewport.Height - 2
+	barCount := m.viewport.Height - 3
 	if barCount < 0 {
 		barCount = 0
 	}
-	bars := strings.Repeat("│\n", barCount)
+
+	// Header and footer for the scrollbar
+	header := "🭽\n▏" + highlight.Render("↑") + "\n"
+	bars := strings.Repeat("▏\n", barCount)
 	// Add up arrow at top, down arrow at bottom (optional, can stylize)
-	arrows := "│\x1b[38;5;5m ↓\x1b[0m\n"
+	footer := "▏" + highlight.Render("↓") + "\n🭼"
 	// Combine everything
-	scrollbar := header + bars + arrows + footer
-	return lipgloss.NewStyle().Width(3).Height(m.viewport.Height).Render(scrollbar)
+	scrollbar := header + bars + footer
+	if m.viewport.TotalLineCount() != m.viewport.VisibleLineCount() {
+
+		return lipgloss.NewStyle().Width(3).Height(m.viewport.Height).Render(scrollbar)
+	} else {
+		return ""
+	}
 }
 
 func (m model) viewViewport() string {
-	viewp := lipgloss.NewStyle().Width(m.viewport.Width).Height(m.viewport.Height).Render(m.viewport.View())
-	return lipgloss.JoinHorizontal(lipgloss.Top, m.viewScrollbar(), viewp, m.viewScrollbar())
+	viewp := lipgloss.NewStyle().Width(m.viewport.Width).Height(m.viewport.Height).MarginTop(0).Render(m.viewport.View())
+	return lipgloss.JoinHorizontal(lipgloss.Top, m.viewScrollbar(), viewp)
 }
 
 // func (m model) preFooter() string {
@@ -372,14 +413,24 @@ func (m model) viewSummary() string {
 
 func (m model) viewFooter() string {
 	footerText := lipgloss.JoinHorizontal(1, m.actionWord(help), " | ", m.actionWord(quit))
-	actionWords := lipgloss.NewStyle().Align(lipgloss.Right).Width(m.windowWidth / 2).Render(footerText)
+	// footaW := lipgloss.NewStyle().Align(lipgloss.Right).Width(m.windowWidth).Render(footerText)
 
 	// Define your help text here
-	helpText := "↑|⇞/↓| ⇟ : scroll • t: task • n: note • b: board • ⎋|q|⎈c: quit • h: help"
+	var helpText strings.Builder
+	helpText.WriteString(highlight.Render("↑") + "/" + highlight.Render("↓"))
+	helpText.WriteString("|")
+	helpText.WriteString(highlight.Render("⇞") + "/" + highlight.Render("⇟"))
+	helpText.WriteString(" scroll")
+	helpText.WriteString("	")
+	helpText.WriteString(lipgloss.NewStyle().Bold(true).Render("Highlighted glyphs are shortcuts"))
+	helpText.WriteString("	")
+	helpText.WriteString(highlight.Render("h") + "|" + highlight.Render("⎋") + ": hide help" + "	")
+	helpText.WriteString(highlight.Render("q") + "|" + highlight.Render("⎈c") + ": quit")
 
 	if m.state == stateHelp {
-		left := lipgloss.NewStyle().Width(m.windowWidth / 2).Align(lipgloss.Center).Render(helpText)
-		return lipgloss.JoinHorizontal(lipgloss.Top, left, actionWords)
+
+		left := lipgloss.NewStyle().Width(m.windowWidth - lipgloss.Width(footerText)).Align(lipgloss.Center).Render(helpText.String())
+		return lipgloss.JoinHorizontal(lipgloss.Top, left, footerText)
 	}
 
 	// Default: action words only, right aligned
@@ -398,7 +449,7 @@ func (m model) View() string {
 	// b.WriteString(m.preFooter())
 	summary := m.viewSummary()
 	if summary != "" {
-		b.WriteString("\n")
+		// b.WriteString("\n")
 		b.WriteString(summary)
 	}
 
