@@ -1,6 +1,6 @@
 ![tasklineUI](logo.png)
 
-A TUI for [taskline](https://github.com/perryrh0dan/taskline), built in Go using [Bubble Tea](https://github.com/charmbracelet/bubbletea).
+A TUI for [taskline](https://github.com/perryrh0dan/taskline), built in Go using [Bubble Tea](https://github.com/charmbracelet/bubbletea) and taking advantage of [kitty's text sizing protocol](https://sw.kovidgoyal.net/kitty/text-sizing-protocol/)
 
 ![tasklineUI Screenshot](screenshot.png)
 
