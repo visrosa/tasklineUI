@@ -444,7 +444,7 @@ func (m model) View() string {
 
 	var b strings.Builder
 	b.WriteString(m.viewHeader())
-	b.WriteString("\n\n")
+	b.WriteString("\n")
 	b.WriteString(m.viewViewport())
 	// b.WriteString(m.preFooter())
 	summary := m.viewSummary()
