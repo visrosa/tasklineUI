@@ -52,6 +52,3 @@ GPL v3.0 or later. See [LICENSE](LICENSE) for details.
 - [taskline](https://github.com/perryrh0dan/taskline) – the backend task/note manager
 - [Bubble Tea](https://github.com/charmbracelet/bubbletea) & [Lip Gloss](https://github.com/charmbracelet/lipgloss) – UI framework and styling
 
----
-
-Feel free to add a screenshot as `screenshot.png` in your repo for visual effect!
