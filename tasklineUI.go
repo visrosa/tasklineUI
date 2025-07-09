@@ -39,6 +39,8 @@ var (
 	highlight = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5"))
 	bold      = lipgloss.NewStyle().Bold(true)
 	greyed    = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	logo      = lipgloss.NewStyle().Foreground(lipgloss.Color("54")).Italic(true).Bold(true)
+	logoUI    = lipgloss.NewStyle().Background(lipgloss.Color("54")).Foreground(lipgloss.Color("5"))
 )
 
 type model struct {
@@ -52,6 +54,8 @@ type model struct {
 	windowWidth  int
 	quitting     bool
 	boardText    string
+	taskText     string
+	noteText     string
 }
 
 func loadLines() (mainLines []string, taskSummary []string) {
@@ -121,36 +125,57 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "pgdown":
 			m.viewport.HalfPageDown()
 			return m, nil
-		// case "t":
-		// 	m.state = stateAddTask
-		// 	m.input.SetValue("")
-		// 	m.input.Focus()
-		// 	return m, textinput.Blink
-		// case "n":
-		// 	m.state = stateAddNote
-		// 	m.input.SetValue("")
-		// 	m.input.Focus()
-		// 	return m, textinput.Blink
-		// case "b":
-		// 	m.state = stateBoard
-		// 	m.input.SetValue("")
-		// 	m.input.Focus()
-		// 	return m, textinput.Blink
+
 		case "q":
-			if m.state == stateNormal || m.state == stateHelp {
+			if m.state == stateNormal || m.state == stateHelp || m.state == stateBoardFilled {
 				m.quitting = true
 				return m, tea.Quit
 			}
 		case "h", "?":
+			if m.state == stateNormal || m.state == stateBoardFilled {
+				m.state = stateHelp
+				return m, nil
+			}
+
 			if m.state == stateHelp {
 				m.state = stateNormal
 				return m, nil
 			}
-			m.state = stateHelp
+
+		case "esc":
+			if m.state == stateNormal {
+				m.quitting = true
+				return m, tea.Quit
+			}
+			if m.state == stateAddTask || m.state == stateAddNote || m.state == stateBoard {
+				m.input.Blur()
+				m.state = stateNormal
+				return m, nil
+			}
+			m.state = stateNormal
 			return m, nil
+
 		}
 		switch m.state {
 		case stateNormal:
+			switch key {
+			case "t":
+				m.state = stateAddTask
+				m.input.SetValue(m.taskText)
+				m.input.Focus()
+				return m, textinput.Blink
+			case "n":
+				m.state = stateAddNote
+				m.input.SetValue(m.noteText)
+				m.input.Focus()
+				return m, textinput.Blink
+			case "b":
+				m.state = stateBoard
+				m.input.SetValue("")
+				m.input.Focus()
+				return m, textinput.Blink
+			}
+		case stateBoardFilled:
 			switch key {
 			case "t":
 				m.state = stateAddTask
@@ -164,33 +189,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, textinput.Blink
 			case "b":
 				m.state = stateBoard
-				m.input.SetValue("")
+				m.input.SetValue(m.boardText)
 				m.input.Focus()
 				return m, textinput.Blink
-			case "q":
-				m.quitting = true
-				return m, tea.Quit
-			case "h", "?":
-				m.state = stateHelp
-				return m, nil
-			}
-		case stateHelp:
-			switch key {
 			case "esc":
+				m.input.SetValue("")
 				m.state = stateNormal
 				return m, nil
 			}
+			// Optionally handle other keys for navigation, etc.
+			return m, nil
 
 		case stateAddTask, stateAddNote, stateBoard:
 			switch key {
-			case "esc":
-				m.input.Blur()
-				m.state = stateNormal
-				return m, nil
+
 			case "tab":
-				if m.state == stateAddTask || m.state == stateAddNote {
+				if m.state == stateAddTask {
+					m.taskText = strings.TrimSpace(m.input.Value())
+					m.input.SetValue(m.taskText)
 					m.state = stateBoard
 				}
+				return m, nil
 			case "enter":
 				val := strings.TrimSpace(m.input.Value())
 				if val != "" {
@@ -234,38 +253,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var cmd tea.Cmd
 			m.input, cmd = m.input.Update(msg)
 			return m, cmd
-		case stateBoardFilled:
-			switch key {
-			case "t":
-				m.state = stateAddTask
-				m.input.SetValue("")
-				m.input.Focus()
-				return m, textinput.Blink
-			case "n":
-				m.state = stateAddNote
-				m.input.SetValue("")
-				m.input.Focus()
-				return m, textinput.Blink
-			case "b":
-				m.state = stateBoard
-				m.input.SetValue(m.boardText)
-				m.input.Focus()
-				return m, textinput.Blink
-			}
-			// Optionally handle other keys for navigation, etc.
-			return m, nil
+
 		}
 	case tea.WindowSizeMsg:
-		m.windowHeight = msg.Height
-		m.windowWidth = msg.Width
+		m.windowHeight = msg.Height - 7 //3 for header + 2
+		m.windowWidth = msg.Width - 2
 		if m.state == stateInitializing {
-			m.viewport = viewport.New(m.windowWidth-2, m.windowHeight-9)
+			m.viewport = viewport.New(m.windowWidth, m.windowHeight)
 			wrapped := wordwrap.String(strings.Join(m.lines, "\n"), m.viewport.Width)
 			m.viewport.SetContent(wrapped)
 			m.state = stateNormal
 		} else {
-			m.viewport.Height = m.windowHeight - 9
-			m.viewport.Width = (m.windowWidth - 2)
+			m.viewport.Height = m.windowHeight
+			m.viewport.Width = (m.windowWidth)
 			wrapped := wordwrap.String(strings.Join(m.lines, "\n"), m.viewport.Width)
 			m.viewport.SetContent(wrapped)
 		}
@@ -275,28 +275,39 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) actionWord(aW actions) string {
+
 	switch m.state {
+	// case stateNormal:
+	// 	if aW == task {
+	// 		return
+	// 	}
 	case stateAddTask:
 		if aW == task {
-			return highlight.Render("task")
+			return highlight.PaddingLeft(1).Render("task")
 		}
 		if aW == board {
-			return highlight.Render("⭾ ") + "board" + greyed.Render(m.boardText)
+			return highlight.Render("⭾") + "board" + greyed.Render(m.boardText)
 		}
-		return greyed.Render(map[actions]string{note: "note", help: "help", quit: "quit"}[aW])
+		return greyed.PaddingLeft(1).Render(map[actions]string{note: "note", help: "help", quit: "quit"}[aW])
 
 	case stateAddNote:
 		if aW == note {
-			return highlight.Render("note")
+			return highlight.PaddingLeft(1).Render("note")
 		}
 		if aW == board {
-			return highlight.Render("⭾") + " board"
+			return highlight.Render("⭾") + "board"
 		}
-		return greyed.Render(map[actions]string{task: "task", help: "help", quit: "quit"}[aW])
+		return greyed.PaddingLeft(1).Render(map[actions]string{task: "task", help: "help", quit: "quit"}[aW])
+
+	// case stateBoard:
+	// 	if aW == board {
+	// 		return highlight.Render("board")
+	// 	}
+	// 	return greyed.PaddingLeft(1).Render(map[actions]string{help: "help", quit: "quit"}[aW])
 
 	case stateBoardFilled:
 		if aW == board {
-			return highlight.Render("b") + "oard " + greyed.Render(m.boardText)
+			return highlight.PaddingLeft(1).Render("b") + "oard " + greyed.Render(m.boardText)
 		}
 		fallthrough
 
@@ -314,7 +325,7 @@ func (m model) actionWord(aW actions) string {
 		case quit:
 			key, rest = "Q", "uit"
 		}
-		return highlight.Bold(true).Render(key) + lipgloss.NewStyle().Bold(true).Render(rest)
+		return highlight.PaddingLeft(1).Render(key) + bold.Render(rest)
 	}
 }
 
@@ -326,7 +337,8 @@ func getHeader() string {
 		//return "\x1b[3m\x1b]66;s=3;taskline\x07\x1b[0m" + "\x1b[2;3m\x1b]66;s=3;ꭐ\x07\x1b[0m" + "\n "
 		return "\x1b[3m\x1b[38;5;54m\x1b]66;s=3;taskline\x07\x1b[0m" + "\x1b[3m\x1b[38;5;5m\x1b[48;5;54m\x1b]66;s=3;ꭐ\x07\x1b[0m" + "\n "
 	} // color 127 for highlight
-	return "\ntaskline\n "
+
+	return lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Render(logo.Render("taskline") + logoUI.Render("ꭐ"))
 }
 
 func (m model) viewTitle() string {
@@ -338,30 +350,31 @@ func (m model) viewActionWords() string {
 	headerNote := m.actionWord(note)
 	headerBoard := m.actionWord(board)
 
-	if m.state == stateAddTask {
-		headerTask = lipgloss.NewStyle().Width(32).Render(headerTask + " " + m.input.View())
-	} else if m.state == stateAddNote {
-		headerNote = lipgloss.NewStyle().Width(32).Render(headerNote + " " + m.input.View())
-	} else if m.state == stateBoard {
-		headerBoard = lipgloss.NewStyle().Width(32).Render(headerBoard + " " + m.input.View())
-	}
-
 	// Calculate max width across all three lines
-	maxWidth := lipgloss.Width(headerTask)
-	if w := lipgloss.Width(headerNote); w > maxWidth {
-		maxWidth = w
-	}
-	if w := lipgloss.Width(headerBoard); w > maxWidth {
-		maxWidth = w
+	availableWidth := m.windowWidth - 12 // Width of title+shortcuts
+
+	if os.Getenv("KITTY_WINDOW_ID") != "" {
+		availableWidth = m.windowWidth - 28
 	}
 
-	// Pad all lines to max width for vertical stability
-	headerTask = lipgloss.NewStyle().Width(maxWidth).Render(headerTask)
-	headerNote = lipgloss.NewStyle().Width(maxWidth).Render(headerNote)
-	headerBoard = lipgloss.NewStyle().Width(maxWidth).Render(headerBoard)
+	headerStyle := lipgloss.NewStyle().Width(availableWidth)
+	if m.state == stateAddTask {
+		headerTask = headerStyle.Render(headerTask + " " + m.input.View())
+	} else if m.state == stateAddNote {
+		headerNote = headerStyle.Render(headerNote + " " + m.input.View())
+	} else if m.state == stateBoard {
+		headerBoard = headerStyle.Render(headerBoard + " " + m.input.View())
+		// m.input.SetValue("value")
+
+	}
+
+	//Pad all lines to max width for vertical stability
+	headerTask = headerStyle.Render(headerTask) + greyed.Render(m.taskText)
+	headerNote = headerStyle.Render(headerNote) + greyed.Render(m.noteText)
+	headerBoard = headerStyle.Render(headerBoard) + greyed.Render(m.boardText)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, headerTask, headerNote, headerBoard)
-	m.awViewport.Width = maxWidth
+	m.awViewport.Width = availableWidth
 	m.awViewport.Height = 3
 	m.awViewport.SetContent(content)
 	return m.awViewport.View()
@@ -370,6 +383,7 @@ func (m model) viewActionWords() string {
 func (m model) viewHeader() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, m.viewTitle(), " ", m.viewActionWords())
 }
+
 func (m model) viewScrollbar() string {
 
 	// The middle part: repeat " │ \n" for (height-2) lines, to account for header/footer
@@ -422,7 +436,7 @@ func (m model) viewFooter() string {
 	helpText.WriteString(highlight.Render("⇞") + "/" + highlight.Render("⇟"))
 	helpText.WriteString(" scroll")
 	helpText.WriteString("	")
-	helpText.WriteString(lipgloss.NewStyle().Bold(true).Render("Highlighted glyphs are shortcuts"))
+	helpText.WriteString(lipgloss.NewStyle().Bold(true).Render("Shortcuts are highlighted"))
 	helpText.WriteString("	")
 	helpText.WriteString(highlight.Render("h") + "|" + highlight.Render("⎋") + ": hide help" + "	")
 	helpText.WriteString(highlight.Render("q") + "|" + highlight.Render("⎈c") + ": quit")
