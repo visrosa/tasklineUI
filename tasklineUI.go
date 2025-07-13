@@ -58,40 +58,19 @@ type model struct {
 	noteText     string
 }
 
-func loadLines() (mainLines []string, taskSummary []string) {
-	// unbuffer preserves taskline's colors
-	cmd := exec.Command("unbuffer", "taskline")
-	out, err := cmd.Output()
-	if err != nil {
-		return []string{"(error running taskline)"}, nil
-	}
-	lines := strings.Split(strings.ReplaceAll(string(out), "\r\n", "\n"), "\n")
-
-	// Always skip the first line and last two lines as they are empty or control codes
-	if len(lines) > 3 {
-		lines = lines[1 : len(lines)-2]
-		mainLines = lines[:len(lines)-2]
-		taskSummary = lines[len(lines)-2:]
-	} else {
-		mainLines = lines
-		taskSummary = nil
-	}
-	return
-}
-
 func initialModel() model {
 	input := textinput.New()
 	input.CharLimit = 256
 	input.Width = 120
 	input.Prompt = ""
-	mainLines, taskSummary := loadLines()
+	mainLines, taskSummary := LoadLines()
 	vp := viewport.New(80, 20) // Default size before detecting the actual dimensions
 	wrapped := wordwrap.String(strings.Join(mainLines, "\n"), vp.Width-2)
 	vp.SetContent(wrapped)
 	// This sets a visible scrollbar style (you can customize colors)
 	// vp.Style = vp.Style.
-	// 	Border(lipgloss.NormalBorder()).
-	// 	BorderForeground(lipgloss.Color("8"))
+	//  	Border(lipgloss.NormalBorder()).
+	//  	BorderForeground(lipgloss.Color("8"))
 
 	awVp := viewport.New(vp.Width, 3) // Action words viewport: height 3
 	return model{
@@ -236,7 +215,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					cmd.Run() // ignore error for now
 					m.input.Blur()
-					mainLines, taskSummary := loadLines()
+					mainLines, taskSummary := LoadLines()
 					m.lines = mainLines
 					m.taskSummary = taskSummary
 					m.viewport.SetContent(strings.Join(mainLines, "\n"))
