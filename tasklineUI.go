@@ -57,6 +57,27 @@ type model struct {
 	taskText     string
 	noteText     string
 }
+// LoadLines runs the taskline command and parses its output into mainLines and taskSummary.
+func LoadLines() (mainLines []string, taskSummary []string) {
+    // unbuffer preserves taskline's colors
+    cmd := exec.Command("unbuffer", "tl")
+    out, err := cmd.Output()
+    if err != nil {
+        return []string{"(error running taskline)"}, nil
+    }
+    lines := strings.Split(strings.ReplaceAll(string(out), "\r\n", "\n"), "\n")
+
+    // Always skip the first line and last two lines as they are empty or control codes
+    if len(lines) > 3 {
+        lines = lines[1 : len(lines)-2]
+        mainLines = lines[:len(lines)-2]
+        taskSummary = lines[len(lines)-2:]
+    } else {
+        mainLines = lines
+        taskSummary = nil
+    }
+    return
+}
 
 func initialModel() model {
 	input := textinput.New()
@@ -195,15 +216,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					var cmd *exec.Cmd
 					if m.state == stateAddTask {
 						if m.boardText != "" {
-							cmd = exec.Command("taskline", "t", val, "-b", m.boardText)
+							cmd = exec.Command("tl", "t", val, "-b", m.boardText)
 						} else {
-							cmd = exec.Command("taskline", "t", val)
+							cmd = exec.Command("tl", "t", val)
 						}
 					} else if m.state == stateAddNote {
 						if m.boardText != "" {
-							cmd = exec.Command("taskline", "n", val, "-b", m.boardText)
+							cmd = exec.Command("tl", "n", val, "-b", m.boardText)
 						} else {
-							cmd = exec.Command("taskline", "n", val)
+							cmd = exec.Command("tl", "n", val)
 						}
 					} else if m.state == stateBoard {
 						m.boardText = val
