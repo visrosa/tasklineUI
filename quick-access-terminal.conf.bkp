@@ -1,0 +1,4 @@
+hide_on_focus_loss yes
+app_id kitty-quick-access
+start_as_hidden yes
+

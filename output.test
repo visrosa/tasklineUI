@@ -1,0 +1,4 @@
+#v_mdfy $argv
+#v_mdfy $argv
+  if test -z $argv
+  unbuffer "$argv" | while read -l line # TODO: deal with `unbuffer` failure
