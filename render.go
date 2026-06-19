@@ -26,7 +26,7 @@ var (
 // emphasis. Each pass captures the character preceding the marker (or start
 // of string) so a markdown construct at position 0 still matches.
 func renderMarkdown(text string) string {
-	text = replaceStyled(text, codeSpanRe, dim)
+	text = replaceStyled(text, codeSpanRe, codeStyle)
 	text = replaceStyled(text, wikilinkRe, dim)
 	text = replaceStyled(text, boldRe, bold)
 	text = replaceStyled(text, italicUnderRe, italic)
@@ -77,7 +77,7 @@ func renderTasks(tasks []taskdata.Task) []string {
 		if i > 0 {
 			lines = append(lines, "")
 		}
-		lines = append(lines, sectionHeader.Render(fmt.Sprintf("%s [%d]", g.project, len(g.tasks))))
+		lines = append(lines, sectionHeader.Render(fmt.Sprintf("%-28s", g.project)))
 		for _, t := range g.tasks {
 			lines = append(lines, renderTaskLine(t))
 		}
@@ -86,12 +86,13 @@ func renderTasks(tasks []taskdata.Task) []string {
 }
 
 func renderTaskLine(t taskdata.Task) string {
-	marker := "□"
+	marker := "󰏄"
 	if t.Start != nil {
-		marker = highlight.Render("●")
+		marker = highlight.Render("󰏃")
 	}
-
-	line := fmt.Sprintf("%2d. %s %s", t.Id, marker, renderMarkdown(t.Description))
+	line := dim.Render(fmt.Sprintf("\x1b]66;n=1:d=2:v=2:w=1;%2d\a", t.Id)) +
+	" " + marker +
+	" " + renderMarkdown(t.Description)
 
 	if t.Priority != "" {
 		line += " " + greyed.Render("("+t.Priority+")")

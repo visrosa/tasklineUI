@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/reflow/wordwrap"
+	"github.com/charmbracelet/x/ansi"
 
 	"visrosa/tasklineUI/internal/taskdata"
 )
@@ -19,6 +19,7 @@ type actions int
 const (
 	task actions = iota
 	board
+	note
 	help
 	quit
 )
@@ -40,7 +41,8 @@ var (
 	greyed        = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	logo          = lipgloss.NewStyle().Foreground(lipgloss.Color("54")).Italic(true).Bold(true)
 	logoUI        = lipgloss.NewStyle().Background(lipgloss.Color("54")).Foreground(lipgloss.Color("5"))
-	sectionHeader = lipgloss.NewStyle().Bold(true).Underline(true)
+	sectionHeader = lipgloss.NewStyle().Bold(true).Background(lipgloss.Color("#440044"))
+	codeStyle     = lipgloss.NewStyle().Italic(true).Background(lipgloss.Color("#250025"))
 	dim           = lipgloss.NewStyle().Faint(true)
 	italic        = lipgloss.NewStyle().Italic(true)
 )
@@ -84,7 +86,7 @@ func (m model) contentLines() []string {
 
 func (m model) setViewportContent() viewport.Model {
 	vp := m.viewport
-	wrapped := wordwrap.String(strings.Join(m.contentLines(), "\n"), vp.Width)
+	wrapped := ansi.Wordwrap(strings.Join(m.contentLines(), "\n"), vp.Width, "")
 	vp.SetContent(wrapped)
 	return vp
 }
@@ -102,7 +104,7 @@ func initialModel() model {
 	m.reload()
 
 	vp := viewport.New(80, 20) // Default size before detecting the actual dimensions
-	wrapped := wordwrap.String(strings.Join(m.contentLines(), "\n"), vp.Width-2)
+	wrapped := ansi.Wordwrap(strings.Join(m.contentLines(), "\n"), vp.Width-2, "")
 	vp.SetContent(wrapped)
 	m.viewport = vp
 
@@ -238,13 +240,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.windowHeight = msg.Height - 7 //3 for header + 2
 		m.windowWidth = msg.Width - 2
+		// Viewport width must leave room for the 3-column scrollbar gutter
+		// (viewScrollbar) drawn beside it in viewViewport — otherwise every
+		// row is 3 columns wider than the terminal and the terminal's own
+		// autowrap pushes the overflow onto a spurious extra line.
 		if m.state == stateInitializing {
-			m.viewport = viewport.New(m.windowWidth, m.windowHeight)
+			m.viewport = viewport.New(m.windowWidth-3, m.windowHeight)
 			m.viewport = m.setViewportContent()
 			m.state = stateNormal
 		} else {
 			m.viewport.Height = m.windowHeight
-			m.viewport.Width = (m.windowWidth)
+			m.viewport.Width = m.windowWidth - 3
 			m.viewport = m.setViewportContent()
 		}
 		return m, nil
@@ -260,13 +266,17 @@ func (m model) actionWord(aW actions) string {
 			return highlight.PaddingLeft(1).Render("task")
 		}
 		if aW == board {
-			return highlight.Render("⭾") + "board" + greyed.Render(m.boardText)
+			return highlight.Render("⭾") + "project" + greyed.Render(m.boardText)
+		}
+		if aW == note {
+			return highlight.PaddingLeft(1).Render("project")
+
 		}
 		return greyed.PaddingLeft(1).Render(map[actions]string{help: "help", quit: "quit"}[aW])
 
 	case stateBoardFilled:
 		if aW == board {
-			return highlight.PaddingLeft(1).Render("b") + "oard " + greyed.Render(m.boardText)
+			return highlight.PaddingLeft(1).Render("p") + "roject " + greyed.Render(m.boardText)
 		}
 		fallthrough
 
@@ -276,7 +286,9 @@ func (m model) actionWord(aW actions) string {
 		case task:
 			key, rest = "t", "ask"
 		case board:
-			key, rest = "b", "oard"
+			key, rest = "p", "roject"
+		case note:
+			key, rest = "n", "ote"
 		case help:
 			key, rest = "H", "elp"
 		case quit:
@@ -301,6 +313,7 @@ func (m model) viewTitle() string {
 
 func (m model) viewActionWords() string {
 	headerTask := m.actionWord(task)
+	headerNote := m.actionWord(note)
 	headerBoard := m.actionWord(board)
 
 	// Calculate max width across both lines
@@ -321,9 +334,9 @@ func (m model) viewActionWords() string {
 	headerTask = headerStyle.Render(headerTask) + greyed.Render(m.taskText)
 	headerBoard = headerStyle.Render(headerBoard) + greyed.Render(m.boardText)
 
-	content := lipgloss.JoinVertical(lipgloss.Left, headerTask, headerBoard)
+	content := lipgloss.JoinVertical(lipgloss.Left, headerTask, headerBoard, headerNote)
 	m.awViewport.Width = availableWidth
-	m.awViewport.Height = 2
+	m.awViewport.Height = 3
 	m.awViewport.SetContent(content)
 	return m.awViewport.View()
 }
