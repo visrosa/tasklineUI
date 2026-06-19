@@ -40,8 +40,9 @@ var (
 	bold          = lipgloss.NewStyle().Bold(true)
 	greyed        = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	logo          = lipgloss.NewStyle().Foreground(lipgloss.Color("54")).Italic(true).Bold(true)
-	logoUI        = lipgloss.NewStyle().Background(lipgloss.Color("54")).Foreground(lipgloss.Color("5"))
-	sectionHeader = lipgloss.NewStyle().Bold(true).Background(lipgloss.Color("#440044"))
+	logoUI        = lipgloss.NewStyle().Background(lipgloss.Color("54")).Foreground(lipgloss.Color("White"))
+	sectionHeader = lipgloss.NewStyle().Bold(true).Background(lipgloss.Color("63"))
+	taskIndex     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("63"))
 	codeStyle     = lipgloss.NewStyle().Italic(true).Background(lipgloss.Color("#250025"))
 	dim           = lipgloss.NewStyle().Faint(true)
 	italic        = lipgloss.NewStyle().Italic(true)
@@ -298,11 +299,14 @@ func (m model) actionWord(aW actions) string {
 	}
 }
 
-// getHeader returns the header string, using Kitty double-size if available
+// getHeader returns the header string, using Kitty triple-size text if available.
+// Both branches style the text via logo/logoUI; the Kitty branch just wraps the
+// kitty text-sizing OSC sequence (s=3) as the "content" each style renders around,
+// the same trick renderTaskLine uses for the id badge.
 func getHeader() string {
 	if os.Getenv("KITTY_WINDOW_ID") != "" {
-		return "\x1b[3m\x1b[38;5;54m\x1b]66;s=3;taskline\x07\x1b[0m" + "\x1b[3m\x1b[38;5;5m\x1b[48;5;54m\x1b]66;s=3;ꭐ\x07\x1b[0m" + "\n "
-	} // color 127 for highlight
+		return logo.Render("\x1b]66;s=3;taskline\a") + logoUI.Render("\x1b]66;s=3;ꭐ\a") + "\n "
+	}
 
 	return lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Render(logo.Render("taskline") + logoUI.Render("ꭐ"))
 }
