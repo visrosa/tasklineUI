@@ -1,16 +1,18 @@
 package main
 
 import (
-    "fmt"
-    "log"
+	"fmt"
+	"log"
+
+	"visrosa/tasklineUI/internal/taskdata"
 )
 
 func main() {
-    items, err := LoadItems()
-    if err != nil {
-        log.Fatal(err)
-    }
-    for _, item := range items {
-        fmt.Printf("%d\t%s\n", item.ID, item.Description)
-    }
+	tasks, err := taskdata.LoadTasks()
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, t := range tasks {
+		fmt.Printf("%d\t%s\t%s\n", t.Id, t.Project, t.Description)
+	}
 }

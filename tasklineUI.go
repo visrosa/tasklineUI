@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -11,13 +10,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/reflow/wordwrap"
+
+	"visrosa/tasklineUI/internal/taskdata"
 )
 
 type actions int
 
 const (
 	task actions = iota
-	note
 	board
 	help
 	quit
@@ -29,54 +29,62 @@ const (
 	stateInitializing state = iota
 	stateNormal
 	stateAddTask
-	stateAddNote
 	stateBoard
 	stateBoardFilled
 	stateHelp
 )
 
 var (
-	highlight = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5"))
-	bold      = lipgloss.NewStyle().Bold(true)
-	greyed    = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	logo      = lipgloss.NewStyle().Foreground(lipgloss.Color("54")).Italic(true).Bold(true)
-	logoUI    = lipgloss.NewStyle().Background(lipgloss.Color("54")).Foreground(lipgloss.Color("5"))
+	highlight     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5"))
+	bold          = lipgloss.NewStyle().Bold(true)
+	greyed        = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	logo          = lipgloss.NewStyle().Foreground(lipgloss.Color("54")).Italic(true).Bold(true)
+	logoUI        = lipgloss.NewStyle().Background(lipgloss.Color("54")).Foreground(lipgloss.Color("5"))
+	sectionHeader = lipgloss.NewStyle().Bold(true).Underline(true)
 )
 
 type model struct {
-	lines        []string // raw output lines from taskline (main content)
-	taskSummary  []string // last two lines from taskline output
+	tasks        []taskdata.Task
+	loadErr      string
+	taskSummary  []string // derived from the loaded pending tasks, not a separate query
 	state        state
 	input        textinput.Model
 	viewport     viewport.Model
-	awViewport   viewport.Model // new viewport for action words
+	awViewport   viewport.Model // action-words strip
 	windowHeight int
 	windowWidth  int
 	quitting     bool
 	boardText    string
 	taskText     string
-	noteText     string
 }
-// LoadLines runs the taskline command and parses its output into mainLines and taskSummary.
-func LoadLines() (mainLines []string, taskSummary []string) {
-    // unbuffer preserves taskline's colors
-    cmd := exec.Command("unbuffer", "tl")
-    out, err := cmd.Output()
-    if err != nil {
-        return []string{"(error running taskline)"}, nil
-    }
-    lines := strings.Split(strings.ReplaceAll(string(out), "\r\n", "\n"), "\n")
 
-    // Always skip the first line and last two lines as they are empty or control codes
-    if len(lines) > 3 {
-        lines = lines[1 : len(lines)-2]
-        mainLines = lines[:len(lines)-2]
-        taskSummary = lines[len(lines)-2:]
-    } else {
-        mainLines = lines
-        taskSummary = nil
-    }
-    return
+// reload re-reads pending tasks from taskwarrior's store and recomputes the summary line.
+func (m *model) reload() {
+	tasks, err := taskdata.LoadTasks()
+	if err != nil {
+		m.loadErr = err.Error()
+		m.tasks = nil
+		m.taskSummary = nil
+		return
+	}
+	m.loadErr = ""
+	m.tasks = tasks
+	m.taskSummary = summaryLines(tasks)
+}
+
+// contentLines is what gets wrapped and handed to the main viewport.
+func (m model) contentLines() []string {
+	if m.loadErr != "" {
+		return []string{"(error loading tasks: " + m.loadErr + ")"}
+	}
+	return renderTasks(m.tasks)
+}
+
+func (m model) setViewportContent() viewport.Model {
+	vp := m.viewport
+	wrapped := wordwrap.String(strings.Join(m.contentLines(), "\n"), vp.Width)
+	vp.SetContent(wrapped)
+	return vp
 }
 
 func initialModel() model {
@@ -84,24 +92,21 @@ func initialModel() model {
 	input.CharLimit = 256
 	input.Width = 120
 	input.Prompt = ""
-	mainLines, taskSummary := LoadLines()
-	vp := viewport.New(80, 20) // Default size before detecting the actual dimensions
-	wrapped := wordwrap.String(strings.Join(mainLines, "\n"), vp.Width-2)
-	vp.SetContent(wrapped)
-	// This sets a visible scrollbar style (you can customize colors)
-	// vp.Style = vp.Style.
-	//  	Border(lipgloss.NormalBorder()).
-	//  	BorderForeground(lipgloss.Color("8"))
 
-	awVp := viewport.New(vp.Width, 3) // Action words viewport: height 3
-	return model{
-		lines:       mainLines,
-		taskSummary: taskSummary,
-		state:       stateInitializing,
-		input:       input,
-		viewport:    vp,
-		awViewport:  awVp,
+	m := model{
+		state: stateInitializing,
+		input: input,
 	}
+	m.reload()
+
+	vp := viewport.New(80, 20) // Default size before detecting the actual dimensions
+	wrapped := wordwrap.String(strings.Join(m.contentLines(), "\n"), vp.Width-2)
+	vp.SetContent(wrapped)
+	m.viewport = vp
+
+	m.awViewport = viewport.New(vp.Width, 2) // Action-words strip: task + board rows
+
+	return m
 }
 
 func (m model) Init() tea.Cmd {
@@ -147,7 +152,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.quitting = true
 				return m, tea.Quit
 			}
-			if m.state == stateAddTask || m.state == stateAddNote || m.state == stateBoard {
+			if m.state == stateAddTask || m.state == stateBoard {
 				m.input.Blur()
 				m.state = stateNormal
 				return m, nil
@@ -164,11 +169,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.input.SetValue(m.taskText)
 				m.input.Focus()
 				return m, textinput.Blink
-			case "n":
-				m.state = stateAddNote
-				m.input.SetValue(m.noteText)
-				m.input.Focus()
-				return m, textinput.Blink
 			case "b":
 				m.state = stateBoard
 				m.input.SetValue("")
@@ -179,11 +179,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch key {
 			case "t":
 				m.state = stateAddTask
-				m.input.SetValue("")
-				m.input.Focus()
-				return m, textinput.Blink
-			case "n":
-				m.state = stateAddNote
 				m.input.SetValue("")
 				m.input.Focus()
 				return m, textinput.Blink
@@ -200,7 +195,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Optionally handle other keys for navigation, etc.
 			return m, nil
 
-		case stateAddTask, stateAddNote, stateBoard:
+		case stateAddTask, stateBoard:
 			switch key {
 
 			case "tab":
@@ -213,41 +208,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				val := strings.TrimSpace(m.input.Value())
 				if val != "" {
-					var cmd *exec.Cmd
-					if m.state == stateAddTask {
-						if m.boardText != "" {
-							cmd = exec.Command("tl", "t", val, "-b", m.boardText)
-						} else {
-							cmd = exec.Command("tl", "t", val)
-						}
-					} else if m.state == stateAddNote {
-						if m.boardText != "" {
-							cmd = exec.Command("tl", "n", val, "-b", m.boardText)
-						} else {
-							cmd = exec.Command("tl", "n", val)
-						}
-					} else if m.state == stateBoard {
+					switch m.state {
+					case stateBoard:
 						m.boardText = val
 						m.state = stateBoardFilled
 						m.input.Blur()
 						return m, nil
-					} else {
-						return m, nil // Should not happen, but just in case
-					}
-					cmd.Run() // ignore error for now
-					m.input.Blur()
-					mainLines, taskSummary := LoadLines()
-					m.lines = mainLines
-					m.taskSummary = taskSummary
-					m.viewport.SetContent(strings.Join(mainLines, "\n"))
-					if m.state == stateAddTask || m.state == stateAddNote {
+					case stateAddTask:
+						taskdata.AddTask(val, m.boardText) // ignore error for now
+						m.input.Blur()
+						m.reload()
+						m.viewport = m.setViewportContent()
 						if m.boardText != "" {
 							m.state = stateBoardFilled
 						} else {
 							m.state = stateNormal
 						}
+						return m, nil
 					}
-					return m, nil
 				}
 			}
 			var cmd tea.Cmd
@@ -260,14 +238,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.windowWidth = msg.Width - 2
 		if m.state == stateInitializing {
 			m.viewport = viewport.New(m.windowWidth, m.windowHeight)
-			wrapped := wordwrap.String(strings.Join(m.lines, "\n"), m.viewport.Width)
-			m.viewport.SetContent(wrapped)
+			m.viewport = m.setViewportContent()
 			m.state = stateNormal
 		} else {
 			m.viewport.Height = m.windowHeight
 			m.viewport.Width = (m.windowWidth)
-			wrapped := wordwrap.String(strings.Join(m.lines, "\n"), m.viewport.Width)
-			m.viewport.SetContent(wrapped)
+			m.viewport = m.setViewportContent()
 		}
 		return m, nil
 	}
@@ -277,10 +253,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) actionWord(aW actions) string {
 
 	switch m.state {
-	// case stateNormal:
-	// 	if aW == task {
-	// 		return
-	// 	}
 	case stateAddTask:
 		if aW == task {
 			return highlight.PaddingLeft(1).Render("task")
@@ -288,22 +260,7 @@ func (m model) actionWord(aW actions) string {
 		if aW == board {
 			return highlight.Render("⭾") + "board" + greyed.Render(m.boardText)
 		}
-		return greyed.PaddingLeft(1).Render(map[actions]string{note: "note", help: "help", quit: "quit"}[aW])
-
-	case stateAddNote:
-		if aW == note {
-			return highlight.PaddingLeft(1).Render("note")
-		}
-		if aW == board {
-			return highlight.Render("⭾") + "board"
-		}
-		return greyed.PaddingLeft(1).Render(map[actions]string{task: "task", help: "help", quit: "quit"}[aW])
-
-	// case stateBoard:
-	// 	if aW == board {
-	// 		return highlight.Render("board")
-	// 	}
-	// 	return greyed.PaddingLeft(1).Render(map[actions]string{help: "help", quit: "quit"}[aW])
+		return greyed.PaddingLeft(1).Render(map[actions]string{help: "help", quit: "quit"}[aW])
 
 	case stateBoardFilled:
 		if aW == board {
@@ -316,8 +273,6 @@ func (m model) actionWord(aW actions) string {
 		switch aW {
 		case task:
 			key, rest = "t", "ask"
-		case note:
-			key, rest = "n", "ote"
 		case board:
 			key, rest = "b", "oard"
 		case help:
@@ -332,9 +287,6 @@ func (m model) actionWord(aW actions) string {
 // getHeader returns the header string, using Kitty double-size if available
 func getHeader() string {
 	if os.Getenv("KITTY_WINDOW_ID") != "" {
-		// return "\x1b]66;s=3;taskline\xE2\x83\xAC\x07\n "
-		// return "\x1b[3m\x1b]66;s=3;t͟a͟s͟k͟l͟i͟n͟e͟\x07\x1b[0m" + "\x1b[2m\x1b]66;s=3;ꭐ\x07\x1b[0m" + "\n "
-		//return "\x1b[3m\x1b]66;s=3;taskline\x07\x1b[0m" + "\x1b[2;3m\x1b]66;s=3;ꭐ\x07\x1b[0m" + "\n "
 		return "\x1b[3m\x1b[38;5;54m\x1b]66;s=3;taskline\x07\x1b[0m" + "\x1b[3m\x1b[38;5;5m\x1b[48;5;54m\x1b]66;s=3;ꭐ\x07\x1b[0m" + "\n "
 	} // color 127 for highlight
 
@@ -347,10 +299,9 @@ func (m model) viewTitle() string {
 
 func (m model) viewActionWords() string {
 	headerTask := m.actionWord(task)
-	headerNote := m.actionWord(note)
 	headerBoard := m.actionWord(board)
 
-	// Calculate max width across all three lines
+	// Calculate max width across both lines
 	availableWidth := m.windowWidth - 12 // Width of title+shortcuts
 
 	if os.Getenv("KITTY_WINDOW_ID") != "" {
@@ -360,22 +311,17 @@ func (m model) viewActionWords() string {
 	headerStyle := lipgloss.NewStyle().Width(availableWidth)
 	if m.state == stateAddTask {
 		headerTask = headerStyle.Render(headerTask + " " + m.input.View())
-	} else if m.state == stateAddNote {
-		headerNote = headerStyle.Render(headerNote + " " + m.input.View())
 	} else if m.state == stateBoard {
 		headerBoard = headerStyle.Render(headerBoard + " " + m.input.View())
-		// m.input.SetValue("value")
-
 	}
 
 	//Pad all lines to max width for vertical stability
 	headerTask = headerStyle.Render(headerTask) + greyed.Render(m.taskText)
-	headerNote = headerStyle.Render(headerNote) + greyed.Render(m.noteText)
 	headerBoard = headerStyle.Render(headerBoard) + greyed.Render(m.boardText)
 
-	content := lipgloss.JoinVertical(lipgloss.Left, headerTask, headerNote, headerBoard)
+	content := lipgloss.JoinVertical(lipgloss.Left, headerTask, headerBoard)
 	m.awViewport.Width = availableWidth
-	m.awViewport.Height = 3
+	m.awViewport.Height = 2
 	m.awViewport.SetContent(content)
 	return m.awViewport.View()
 }
@@ -412,12 +358,6 @@ func (m model) viewViewport() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, m.viewScrollbar(), viewp)
 }
 
-// func (m model) preFooter() string {
-// 	info := lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).Padding(0, 1).Render(fmt.Sprintf("%3.f%%", m.viewport.ScrollPercent()*100))
-// 	line := strings.Repeat("─", max(0, m.viewport.Width-lipgloss.Width(info)))
-// 	return lipgloss.JoinHorizontal(lipgloss.Center, line, info)
-// }
-
 func (m model) viewSummary() string {
 	if len(m.taskSummary) == 0 {
 		return ""
@@ -427,7 +367,6 @@ func (m model) viewSummary() string {
 
 func (m model) viewFooter() string {
 	footerText := lipgloss.JoinHorizontal(1, m.actionWord(help), " | ", m.actionWord(quit))
-	// footaW := lipgloss.NewStyle().Align(lipgloss.Right).Width(m.windowWidth).Render(footerText)
 
 	// Define your help text here
 	var helpText strings.Builder
@@ -460,10 +399,8 @@ func (m model) View() string {
 	b.WriteString(m.viewHeader())
 	b.WriteString("\n")
 	b.WriteString(m.viewViewport())
-	// b.WriteString(m.preFooter())
 	summary := m.viewSummary()
 	if summary != "" {
-		// b.WriteString("\n")
 		b.WriteString(summary)
 	}
 
