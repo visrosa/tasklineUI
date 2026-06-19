@@ -77,7 +77,7 @@ func renderTasks(tasks []taskdata.Task) []string {
 		if i > 0 {
 			lines = append(lines, "")
 		}
-		lines = append(lines, taskIndex.Render("")+sectionHeader.Render(fmt.Sprintf(" %-27s", g.project))+taskIndex.Render("◗"))
+		lines = append(lines, taskIndex.Render("🭁") + sectionHeader.Render(fmt.Sprintf("   %-15s", g.project))+taskIndex.Render("◗"))
 		for _, t := range g.tasks {
 			lines = append(lines, renderTaskLine(t))
 		}
@@ -90,10 +90,10 @@ func renderTaskLine(t taskdata.Task) string {
 	if t.Start != nil {
 		marker = highlight.Render("󰏃")
 	}
-	line := taskIndex.Render(" ") +
+	line := taskIndex.Render("") +
 		sectionHeader.Render(fmt.Sprintf("\x1b]66;n=1:d=2:v=2:w=2; %2d \a", t.Id)) +
 		taskIndex.Render("🭬") +
-		" " + marker +
+		" " + logo.Render(marker) +
 		" " + renderMarkdown(t.Description)
 
 	if t.Priority != "" {

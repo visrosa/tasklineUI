@@ -40,7 +40,7 @@ var (
 	bold          = lipgloss.NewStyle().Bold(true)
 	greyed        = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	logo          = lipgloss.NewStyle().Foreground(lipgloss.Color("54")).Italic(true).Bold(true)
-	logoUI        = lipgloss.NewStyle().Background(lipgloss.Color("54")).Foreground(lipgloss.Color("White"))
+	logoUI        = lipgloss.NewStyle().Background(lipgloss.Color("54"))
 	sectionHeader = lipgloss.NewStyle().Bold(true).Background(lipgloss.Color("63"))
 	taskIndex     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("63"))
 	codeStyle     = lipgloss.NewStyle().Italic(true).Background(lipgloss.Color("#250025"))
