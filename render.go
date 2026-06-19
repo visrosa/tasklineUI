@@ -11,6 +11,12 @@ import (
 	"visrosa/tasklineUI/internal/taskdata"
 )
 
+// prefixGlyphFudge corrects for Nerd Font/box-drawing glyphs in the task-line
+// prefix rendering wider on screen (this font, kitty) than ansi.StringWidth's
+// Unicode-table-based measurement reports. Adjust if it drifts visibly out of
+// alignment again — there's no formula behind the number, it's eyeballed.
+const prefixGlyphFudge = 3
+
 var (
 	codeSpanRe    = regexp.MustCompile("(^|[^`])`([^`]+)`")
 	wikilinkRe    = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
@@ -111,7 +117,12 @@ func renderTaskLine(t taskdata.Task, width int) string {
 		body += " " + greyed.Render("due:"+t.Due.Format("2006-01-02"))
 	}
 
-	prefixWidth := ansi.StringWidth(prefix)
+	// ansi.StringWidth measures the prefix's Nerd Font/box-drawing glyphs
+	// (🭬, the in-progress marker) at 1 column each per standard Unicode
+	// width tables, but kitty renders them wider on screen with this font —
+	// a font-metric reality no width library captures. prefixGlyphFudge is
+	// an empirical correction, not a derived value.
+	prefixWidth := ansi.StringWidth(prefix) + prefixGlyphFudge
 	wrapWidth := width - prefixWidth
 	if wrapWidth < 1 {
 		wrapWidth = 1

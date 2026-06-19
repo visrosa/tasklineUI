@@ -27,7 +27,7 @@ func TestRenderTaskLineHangingIndent(t *testing.T) {
 		taskIndex.Render("🭬") +
 		" " + logo.Render("󰏄") +
 		" "
-	prefixWidth := ansi.StringWidth(prefix)
+	prefixWidth := ansi.StringWidth(prefix) + prefixGlyphFudge
 
 	for i, l := range lines {
 		if ansi.StringWidth(l) > width {
