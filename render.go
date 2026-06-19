@@ -2,9 +2,47 @@ package main
 
 import (
 	"fmt"
+	"regexp"
+
+	"github.com/charmbracelet/lipgloss"
 
 	"visrosa/tasklineUI/internal/taskdata"
 )
+
+var (
+	codeSpanRe    = regexp.MustCompile("(^|[^`])`([^`]+)`")
+	wikilinkRe    = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
+	boldRe        = regexp.MustCompile(`(^|[^*])\*\*([^*]+)\*\*`)
+	italicUnderRe = regexp.MustCompile(`(^|[^_])__([^_]+)__`)
+	italicStarRe  = regexp.MustCompile(`(^|[^*])\*([^*]+)\*`)
+)
+
+// renderMarkdown applies a small set of inline markdown-like substitutions to
+// task description text: backtick code spans and [[wikilinks]] dim, **bold**
+// bold, *italic*/__italic__ italic. Order matters — bold must consume
+// **text** before the single-* pass runs, or it'd see two adjacent *text*
+// spans instead. Single-underscore _text_ is deliberately left untouched:
+// real task data uses it to quote identifiers (_add_, _v_), not to signal
+// emphasis. Each pass captures the character preceding the marker (or start
+// of string) so a markdown construct at position 0 still matches.
+func renderMarkdown(text string) string {
+	text = replaceStyled(text, codeSpanRe, dim)
+	text = replaceStyled(text, wikilinkRe, dim)
+	text = replaceStyled(text, boldRe, bold)
+	text = replaceStyled(text, italicUnderRe, italic)
+	text = replaceStyled(text, italicStarRe, italic)
+	return text
+}
+
+func replaceStyled(text string, re *regexp.Regexp, style lipgloss.Style) string {
+	return re.ReplaceAllStringFunc(text, func(m string) string {
+		g := re.FindStringSubmatch(m)
+		if len(g) == 2 {
+			return style.Render(g[1])
+		}
+		return g[1] + style.Render(g[2])
+	})
+}
 
 type projectGroup struct {
 	project string
@@ -53,7 +91,7 @@ func renderTaskLine(t taskdata.Task) string {
 		marker = highlight.Render("●")
 	}
 
-	line := fmt.Sprintf("%2d. %s %s", t.Id, marker, t.Description)
+	line := fmt.Sprintf("%2d. %s %s", t.Id, marker, renderMarkdown(t.Description))
 
 	if t.Priority != "" {
 		line += " " + greyed.Render("("+t.Priority+")")

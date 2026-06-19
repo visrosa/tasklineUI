@@ -41,6 +41,8 @@ var (
 	logo          = lipgloss.NewStyle().Foreground(lipgloss.Color("54")).Italic(true).Bold(true)
 	logoUI        = lipgloss.NewStyle().Background(lipgloss.Color("54")).Foreground(lipgloss.Color("5"))
 	sectionHeader = lipgloss.NewStyle().Bold(true).Underline(true)
+	dim           = lipgloss.NewStyle().Faint(true)
+	italic        = lipgloss.NewStyle().Italic(true)
 )
 
 type model struct {
