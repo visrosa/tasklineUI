@@ -77,18 +77,21 @@ func (m *model) reload() {
 	m.taskSummary = summaryLines(tasks)
 }
 
-// contentLines is what gets wrapped and handed to the main viewport.
-func (m model) contentLines() []string {
+// contentLines is what gets handed to the main viewport, already wrapped to
+// fit width — task lines wrap themselves with a hanging indent (renderTasks),
+// so nothing here needs a second global wrap pass except the one line type
+// with no such self-wrapping: the load-error message, which can be
+// arbitrarily long.
+func (m model) contentLines(width int) []string {
 	if m.loadErr != "" {
-		return []string{"(error loading tasks: " + m.loadErr + ")"}
+		return []string{ansi.Wordwrap("(error loading tasks: "+m.loadErr+")", width, "")}
 	}
-	return renderTasks(m.tasks)
+	return renderTasks(m.tasks, width)
 }
 
 func (m model) setViewportContent() viewport.Model {
 	vp := m.viewport
-	wrapped := ansi.Wordwrap(strings.Join(m.contentLines(), "\n"), vp.Width, "")
-	vp.SetContent(wrapped)
+	vp.SetContent(strings.Join(m.contentLines(vp.Width), "\n"))
 	return vp
 }
 
@@ -105,8 +108,7 @@ func initialModel() model {
 	m.reload()
 
 	vp := viewport.New(80, 20) // Default size before detecting the actual dimensions
-	wrapped := ansi.Wordwrap(strings.Join(m.contentLines(), "\n"), vp.Width-2, "")
-	vp.SetContent(wrapped)
+	vp.SetContent(strings.Join(m.contentLines(vp.Width-2), "\n"))
 	m.viewport = vp
 
 	m.awViewport = viewport.New(vp.Width, 2) // Action-words strip: task + board rows

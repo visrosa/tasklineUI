@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"visrosa/tasklineUI/internal/taskdata"
 )
@@ -67,7 +69,7 @@ func groupByProject(tasks []taskdata.Task) []projectGroup {
 	return groups
 }
 
-func renderTasks(tasks []taskdata.Task) []string {
+func renderTasks(tasks []taskdata.Task, width int) []string {
 	if len(tasks) == 0 {
 		return []string{greyed.Render("No pending tasks.")}
 	}
@@ -79,31 +81,54 @@ func renderTasks(tasks []taskdata.Task) []string {
 		}
 		lines = append(lines, taskIndex.Render("🭁") + sectionHeader.Render(fmt.Sprintf("   %-15s", g.project))+taskIndex.Render("◗"))
 		for _, t := range g.tasks {
-			lines = append(lines, renderTaskLine(t))
+			lines = append(lines, renderTaskLine(t, width))
 		}
 	}
 	return lines
 }
 
-func renderTaskLine(t taskdata.Task) string {
+// renderTaskLine wraps the description (plus priority/due suffix) on its own,
+// against width minus the prefix's rendered width, so continuation lines can
+// be re-indented to align under the description instead of resetting to
+// column 0 — wrapping the whole assembled line in one global pass (as
+// tasklineUI.go used to do) has no notion of a per-line prefix to preserve.
+func renderTaskLine(t taskdata.Task, width int) string {
 	marker := "󰏄"
 	if t.Start != nil {
 		marker = highlight.Render("󰏃")
 	}
-	line := taskIndex.Render("") +
+	prefix := taskIndex.Render("") +
 		sectionHeader.Render(fmt.Sprintf("\x1b]66;n=1:d=2:v=2:w=2; %2d \a", t.Id)) +
 		taskIndex.Render("🭬") +
 		" " + logo.Render(marker) +
-		" " + renderMarkdown(t.Description)
+		" "
 
+	body := renderMarkdown(t.Description)
 	if t.Priority != "" {
-		line += " " + greyed.Render("("+t.Priority+")")
+		body += " " + greyed.Render("("+t.Priority+")")
 	}
 	if t.Due != nil {
-		line += " " + greyed.Render("due:"+t.Due.Format("2006-01-02"))
+		body += " " + greyed.Render("due:"+t.Due.Format("2006-01-02"))
 	}
 
-	return line
+	prefixWidth := ansi.StringWidth(prefix)
+	wrapWidth := width - prefixWidth
+	if wrapWidth < 1 {
+		wrapWidth = 1
+	}
+
+	wrapped := strings.Split(ansi.Wordwrap(body, wrapWidth, ""), "\n")
+	indent := strings.Repeat(" ", prefixWidth)
+
+	var b strings.Builder
+	b.WriteString(prefix)
+	b.WriteString(wrapped[0])
+	for _, l := range wrapped[1:] {
+		b.WriteString("\n")
+		b.WriteString(indent)
+		b.WriteString(l)
+	}
+	return b.String()
 }
 
 // summaryLines is derived entirely from the already-loaded pending set —
