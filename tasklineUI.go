@@ -43,7 +43,7 @@ var (
 	logoUI        = lipgloss.NewStyle().Background(lipgloss.Color("54"))
 	sectionHeader = lipgloss.NewStyle().Bold(true).Background(lipgloss.Color("63"))
 	taskIndex     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("63"))
-	codeStyle     = lipgloss.NewStyle().Italic(true).Background(lipgloss.Color("#250025"))
+	codeStyle     = lipgloss.NewStyle().Faint(true).Italic(true).Background(lipgloss.Color("#250025"))
 	dim           = lipgloss.NewStyle().Faint(true)
 	italic        = lipgloss.NewStyle().Italic(true)
 )

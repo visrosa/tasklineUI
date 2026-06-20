@@ -15,7 +15,7 @@ import (
 // prefix rendering wider on screen (this font, kitty) than ansi.StringWidth's
 // Unicode-table-based measurement reports. Adjust if it drifts visibly out of
 // alignment again — there's no formula behind the number, it's eyeballed.
-const prefixGlyphFudge = 3
+const prefixGlyphFudge = 2
 
 var (
 	codeSpanRe    = regexp.MustCompile("(^|[^`])`([^`]+)`")
@@ -85,7 +85,10 @@ func renderTasks(tasks []taskdata.Task, width int) []string {
 		if i > 0 {
 			lines = append(lines, "")
 		}
-		lines = append(lines, taskIndex.Render("🭁") + sectionHeader.Render(fmt.Sprintf("   %-15s", g.project))+taskIndex.Render("◗"))
+		lines = append(lines, 
+			taskIndex.Render("🭁") +
+			sectionHeader.Render(fmt.Sprintf(" %-25s", g.project)) +
+			taskIndex.Render("◗"))
 		for _, t := range g.tasks {
 			lines = append(lines, renderTaskLine(t, width))
 		}
@@ -99,6 +102,9 @@ func renderTasks(tasks []taskdata.Task, width int) []string {
 // column 0 — wrapping the whole assembled line in one global pass (as
 // tasklineUI.go used to do) has no notion of a per-line prefix to preserve.
 func renderTaskLine(t taskdata.Task, width int) string {
+// 󱓼 U+f14fc Square rounded outline and
+// 󱓻 U+f14fb Square rounded instead of the octagons;
+// 󱨇 and 󱨈 as Square rounded badge icons, useful for edited tasks maybe
 	marker := "󰏄"
 	if t.Start != nil {
 		marker = highlight.Render("󰏃")
