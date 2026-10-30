@@ -15,8 +15,10 @@ A TUI for [taskline](https://github.com/perryrh0dan/taskline), built in Go using
 Unless there is demand, this will probably not support deleting, moving, or any direct interaction with already existing items. That would require a lot of parsing taskline output, or reimplementing a lot of its logic.
 
 
+Task badges and the header use ordinary text outside Kitty, including in Shadow Term. Kitty keeps its OSC 66 sizing. Build or run the complete Go package so the renderer and data backend are included.
+
 ## Installation
-You can either run the `tasklineUI.go` file directly or create a binary.
+You can either run the complete package directly or create a binary.
 
 ### Prerequisites
 
@@ -40,7 +42,7 @@ To run:
 ```sh
 git clone https://github.com/visrosa/tasklineUI.git
 cd tasklineUI
-go run tasklineUI.go
+go run .
 ```
 
 ## License

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
@@ -85,10 +86,10 @@ func renderTasks(tasks []taskdata.Task, width int) []string {
 		if i > 0 {
 			lines = append(lines, "")
 		}
-		lines = append(lines, 
-			taskIndex.Render("🭁") +
-			sectionHeader.Render(fmt.Sprintf(" %-25s", g.project)) +
-			taskIndex.Render("◗"))
+		lines = append(lines,
+			taskIndex.Render("🭁")+
+				sectionHeader.Render(fmt.Sprintf(" %-25s", g.project))+
+				taskIndex.Render("◗"))
 		for _, t := range g.tasks {
 			lines = append(lines, renderTaskLine(t, width))
 		}
@@ -101,16 +102,25 @@ func renderTasks(tasks []taskdata.Task, width int) []string {
 // be re-indented to align under the description instead of resetting to
 // column 0 — wrapping the whole assembled line in one global pass (as
 // tasklineUI.go used to do) has no notion of a per-line prefix to preserve.
+// Keep the badge payload visible when the terminal does not implement OSC 66.
+func taskBadge(id int) string {
+	label := fmt.Sprintf(" %2d ", id)
+	if os.Getenv("KITTY_WINDOW_ID") != "" {
+		return "\x1b]66;n=1:d=2:v=2:w=2;" + label + "\a"
+	}
+	return label
+}
+
 func renderTaskLine(t taskdata.Task, width int) string {
-// 󱓼 U+f14fc Square rounded outline and
-// 󱓻 U+f14fb Square rounded instead of the octagons;
-// 󱨇 and 󱨈 as Square rounded badge icons, useful for edited tasks maybe
+	// 󱓼 U+f14fc Square rounded outline and
+	// 󱓻 U+f14fb Square rounded instead of the octagons;
+	// 󱨇 and 󱨈 as Square rounded badge icons, useful for edited tasks maybe
 	marker := "󰏄"
 	if t.Start != nil {
 		marker = highlight.Render("󰏃")
 	}
 	prefix := taskIndex.Render("") +
-		sectionHeader.Render(fmt.Sprintf("\x1b]66;n=1:d=2:v=2:w=2; %2d \a", t.Id)) +
+		sectionHeader.Render(taskBadge(t.Id)) +
 		taskIndex.Render("🭬") +
 		" " + logo.Render(marker) +
 		" "

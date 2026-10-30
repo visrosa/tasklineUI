@@ -23,7 +23,7 @@ func TestRenderTaskLineHangingIndent(t *testing.T) {
 	}
 
 	prefix := taskIndex.Render("") +
-		sectionHeader.Render("\x1b]66;n=1:d=2:v=2:w=2; 69 \a") +
+		sectionHeader.Render(taskBadge(69)) +
 		taskIndex.Render("🭬") +
 		" " + logo.Render("󰏄") +
 		" "
@@ -59,4 +59,18 @@ func TestRenderTaskLineNarrowViewportNoPanic(t *testing.T) {
 	renderTaskLine(task, 1)
 	renderTaskLine(task, 0)
 	renderTaskLine(task, -5)
+}
+
+func TestTaskBadgeTerminalCompatibility(t *testing.T) {
+	for _, kitty := range []string{"", "42"} {
+		t.Setenv("KITTY_WINDOW_ID", kitty)
+		rendered := renderTaskLine(taskdata.Task{Id: 69, Description: "fixture task"}, 80)
+		if kitty == "" {
+			if strings.Contains(rendered, "\x1b]66;") || !strings.Contains(ansi.Strip(rendered), "69") {
+				t.Fatalf("ordinary terminal lost badge payload: %q", rendered)
+			}
+		} else if !strings.Contains(rendered, "\x1b]66;n=1:d=2:v=2:w=2; 69 \a") {
+			t.Fatalf("Kitty badge was not preserved: %q", rendered)
+		}
+	}
 }
